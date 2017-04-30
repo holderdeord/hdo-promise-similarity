@@ -1,10 +1,10 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from optparse import OptionParser
 
 import sys
 import csv
-import nltk
 import json
 import re
 import os
@@ -53,8 +53,12 @@ with open(args[0], 'r') as csvfile:
 
     with open(tmpfile, 'w') as out:
         for row in reader:
-            tokens = ' '.join(nltk.word_tokenize(row[opts.text_column]))
-            out.write(separator + ' ' + tokens + '\n')
+            try:
+              text = row[opts.text_column];
+              out.write(separator + ' ' + text + '\n')
+            except Exception as e:
+              print(json.dumps(text))
+              raise
 
 tagbm = os.path.join(opts.obt_path, 'tag-bm.sh')
 proc = Popen([tagbm, tmpfile], stdout=PIPE, stderr= open(os.devnull, 'w'))
@@ -96,9 +100,9 @@ while True:
 if opts.only_lemmas:
     for sentence in result:
         lemmas = [word['lemma'] for word in sentence]
-        print json.dumps(lemmas)
+        print(json.dumps(lemmas))
 elif opts.ndjson:
     for sentence in result:
-        print json.dumps(result)
+        print(json.dumps(result))
 else:
-    print json.dumps(result)
+    print(json.dumps(result))
