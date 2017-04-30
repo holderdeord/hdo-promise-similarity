@@ -7,13 +7,7 @@ Compute the cosine similarity of Norwegian political party programs.
 Install the [Oslo Bergen Tagger][1], then
 
     pip install -r requirements.txt
-
-    script/download.sh
-
-    script/tag-csv.py \
-      --text-column body \
-      --obt-path /path/to/oslo-bergen-tagger \
-      data/promises.csv
+    script/pipeline.sh
 
 # Process
 
