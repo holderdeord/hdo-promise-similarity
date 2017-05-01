@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import argparse
 import json
 import requests
@@ -7,7 +9,6 @@ import csv
 from slugify import slugify
 from tagger import Tagger
 from similarity_calculator import SimilarityCalculator
-
 
 class Executor():
 
@@ -19,6 +20,10 @@ class Executor():
         self.result_file       = os.path.join(self.data_dir, 'result.json')
         self.stop_words_file   = os.path.join(self.data_dir, 'ton_idf.txt')
 
+        self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.json')
+        self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.json')
+
+    def parse_args(self):
         parser = argparse.ArgumentParser(
             description='Calculate promise similarity.')
 
@@ -33,14 +38,17 @@ class Executor():
 
         self.args = parser.parse_args()
 
+
     def execute(self):
-        self.setup()
+        self.parse_args()
+        self.download_deps()
         self.tag()
         self.calculate_promise_similarities()
         self.consolidate()
         self.calculate_program_similarities()
+        self.calculate_program_reuse()
 
-    def setup(self):
+    def download_deps(self):
         if (not os.path.exists(self.promise_file)) or 'download' in self.args.no_cache:
             print('Downloading promises')
             self.download(
@@ -77,7 +85,7 @@ class Executor():
         if (not os.path.exists(self.similarities_file)) or 'similarities' in self.args.no_cache:
             print('Calculating similarity')
             docs = [' '.join(sentence) for sentence in self.lemmas]
-            self.similarities = SimilarityCalculator(docs).get()
+            self.similarities = SimilarityCalculator(docs, threshold=0.7).get()
 
             with open(self.similarities_file, 'w') as out:
                 out.write(json.dumps(self.similarities))
@@ -97,14 +105,15 @@ class Executor():
             for related in sim['related']:
                 if related['index'] != sim['index']:
                     related_promises.append({
-                        "id": int(self.promises[related['index']]['id']),
+                        "id": self.promises[related['index']]['id'],
                         "score": related['score']
                     })
 
-            result.append({
-                "id": int(self.promises[sim['index']]['id']),
-                "related": related_promises
-            })
+            if len(sim['related']):
+                result.append({
+                    "id": self.promises[sim['index']]['id'],
+                    "related": related_promises
+                })
 
         with open(self.result_file, 'w') as out:
             out.write(json.dumps(result))
@@ -131,7 +140,7 @@ class Executor():
             for promise in promises:
                 full_text.append(promise['body'])
 
-            texts.append('\n'.join(full_text))
+            texts.append(' '.join(full_text))
 
         stop_words = []
         with open(os.path.join(self.data_dir, 'ton_idf.txt'), 'r') as f:
@@ -151,13 +160,47 @@ class Executor():
                 } for related in sim['related']]
             })
 
-        with open(os.path.join(self.data_dir, 'program-similarities.json'), 'w') as out:
+        with open(self.program_similarities_file, 'w') as out:
             out.write(json.dumps(result))
+
+    """
+    1. Hvor mange løfter i partiets program har over >90% likehet med løfter i foregående periodes program?
+    2. Hvor mange løfter i regjeringsplattformen har over >90% likhet løfter i med respektive partienes program?
+    """
+    def calculate_program_reuse(self):
+        raise NotImplementedError('calculate_program_reuse')
+
+        print('Calculating program reuse')
+
+        by_promisor = {}
+        reuse = {}
+
+        for promise in self.promises:
+            promisor = promise['promisor']
+            period = promise['period']
+
+            if not promisor in by_promisor:
+                by_promisor[promisor] = {}
+
+            if not period in by_promisor[promisor]:
+                by_promisor[promisor][period] = []
+
+            by_promisor[promisor][period].append(promise)
+
+
+
+
+        with open(self.program_reuse_file, 'w') as out:
+            out.write(json.dumps(reuse))
 
     def read_promises(self):
         print('Reading promises')
         self.promises = []
 
         with open(self.promise_file, 'r') as csvfile:
-            for row in csv.DictReader(csvfile):
+            reader = csv.DictReader(csvfile)
+            for (index, row) in enumerate(reader):
+                row['index'] = index
+                row['id'] = int(row['id'])
+
                 self.promises.append(row)

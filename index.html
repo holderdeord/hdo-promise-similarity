@@ -23,6 +23,10 @@
             box-shadow: 0 1px rgba(0,0,0,.12);
         }
 
+        .hdo-card a {
+            color: inherit;
+        }
+
         .pull-right { float: right; }
         .nowrap { white-space: nowrap; }
     </style>
@@ -47,13 +51,13 @@
                 if (!this.state.data) {
                     return null;
                 }
-                
+
                 return this.props.children(this.state.data);
             }
         }
 
         class App extends React.Component {
-            state = { max: 10, data: null }
+            state = { min: 0, max: 30, data: null }
 
             componentDidMount() {
                 fetch('data/result.json')
@@ -80,58 +84,58 @@
                         </nav>
 
                         <div className="container p-t-1">
-                            <div className="row">
-                                <div className="col-sm-12">
-                                    {data.slice(0, this.state.max).map(p => (
-                                        <PromiseFetcher key={p.id} id={p.id}>
-                                            {promise => (
-                                                <div className="hdo-card">
-                                                    <div className="hdo-card-header">
-                                                        <em>{promise.body}</em> 
-                                                        <small className="text-muted pull-right">{promise.promisor_name}, {promise.parliament_period_name}</small>
-                                                    </div>
-
-                                                    <div className="p-a-3">
-                                                        <small>
-                                                            <table className="table table-sm">
-                                                                <thead>
-                                                                    <tr>
-                                                                        <th>Likhet</th>
-                                                                        <th>Løfte</th>
-                                                                        <th>Hvem</th>
-                                                                        <th>Når</th>
-                                                                    </tr>
-                                                                </thead>
-
-                                                                <tbody>
-                                                                    {p.related.map(r => (
-                                                                        <PromiseFetcher key={r.id} id={r.id}>
-                                                                            {relatedPromise => (
-                                                                                <tr>
-                                                                                    <th>{(r.score * 100).toFixed(2)} %</th>
-                                                                                    <td><em>{relatedPromise.body}</em></td>
-                                                                                    <td className="nowrap">{relatedPromise.promisor_name}</td>
-                                                                                    <td className="nowrap">{relatedPromise.parliament_period_name}</td>
-                                                                                </tr>
-                                                                            )}
-                                                                        </PromiseFetcher>
-                                                                    ))}
-                                                                    
-                                                                </tbody>
-                                                            </table>
-                                                        </small>
-                                                    </div>
+                            {data.slice(this.state.min, this.state.max).map(p => (
+                                <PromiseFetcher key={p.id} id={p.id}>
+                                    {promise => (
+                                        <div className="row hdo-card">
+                                            <div className="col-md-3">
+                                                <div className="hdo-card-header">
+                                                    <em><a href={`//data.holderdeord.no/promises/${p.id}`}>{promise.body}</a></em>
+                                                    <div><small className="text-muted">{promise.promisor_name}, {promise.parliament_period_name}</small></div>
                                                 </div>
-                                            )}
-                                        </PromiseFetcher>
-                                    ))}
-                                </div>
-                            </div>
+                                            </div>
+
+                                            <div className="col-md-9">
+                                                <small className="p-a-3">
+                                                    {p.related.length ? (
+                                                        <table className="table table-sm">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Likhet</th>
+                                                                    <th>Løfte</th>
+                                                                    <th>Hvem</th>
+                                                                    <th>Når</th>
+                                                                </tr>
+                                                            </thead>
+
+                                                            <tbody>
+                                                                {p.related.map(r => (
+                                                                    <PromiseFetcher key={r.id} id={r.id}>
+                                                                        {relatedPromise => (
+                                                                            <tr>
+                                                                                <th>{(r.score * 100).toFixed(2)} %</th>
+                                                                                <td><em><a href={`//data.holderdeord.no/promises/${r.id}`}>{relatedPromise.body}</a></em></td>
+                                                                                <td className="nowrap">{relatedPromise.promisor_name}</td>
+                                                                                <td className="nowrap">{relatedPromise.parliament_period_name}</td>
+                                                                            </tr>
+                                                                        )}
+                                                                    </PromiseFetcher>
+                                                                ))}
+
+                                                            </tbody>
+                                                        </table>
+                                                    ) : null}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    )}
+                                </PromiseFetcher>
+                            ))}
 
                             <div className="row">
                                 <div className="col-sm-12">
                                     <div className="m-x-auto" style={{width: '200px'}}>
-                                        <div className="btn btn-primary" onClick={() => this.setState({max: this.state.max + 10})}>Last inn flere</div>
+                                        <div className="btn btn-primary" onClick={() => this.setState({max: this.state.max + 20})}>Last inn flere</div>
                                     </div>
                                 </div>
                             </div>
