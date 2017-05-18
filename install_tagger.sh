@@ -14,7 +14,8 @@ if [ ! -f obt/bin/mtag ]; then
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         wget "${BASE_URL}/linux64/mtag-linux-1-11" -O obt/bin/mtag
     else
-        echo "You need to install manually cg3. See http://beta.visl.sdu.dk/cg3/chunked/installation.html for instructions"
+        echo "Your platform $OSTYPE is not supported."
+        exit 1
     fi
 fi
 
@@ -31,7 +32,7 @@ elif [[ "$OSTYPE" == "linux-gnu" ]]; then
         sudo apt install cg3
     fi
 else
-    echo "You need to install manually cg3. See http://beta.visl.sdu.dk/cg3/chunked/installation.html for instructions"
+    echo "You need to install cg3 manually. See http://beta.visl.sdu.dk/cg3/chunked/installation.html for instructions"
 fi
 
 # Clone obt-stat repo
