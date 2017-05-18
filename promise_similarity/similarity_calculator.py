@@ -31,15 +31,14 @@ class SimilarityCalculator():
                 related_docs_indices = all_scores.argsort()[:-self.top:-1]
                 scores = all_scores[related_docs_indices]
             elif self.threshold:
-                related_docs_indices = np.nonzero(
-                    all_scores > self.threshold)[0]
+                related_docs_indices = np.nonzero(all_scores > self.threshold)[0]
                 scores = all_scores[related_docs_indices]
 
             related = [
                 {
-                    "index": idx,
+                    "index": int(idx),
                     "score": score,
-                    "text": self.docs[idx]
+                    "text": self.docs[int(idx)]
                 } for (idx, score) in zip(related_docs_indices, scores) if idx != index
             ]
 
