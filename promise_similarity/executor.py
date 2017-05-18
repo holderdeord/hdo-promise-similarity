@@ -7,13 +7,16 @@ import os
 import csv
 
 from slugify import slugify
-from tagger import Tagger
-from similarity_calculator import SimilarityCalculator
+from .tagger import Tagger
+from .similarity_calculator import SimilarityCalculator
 
 class Executor():
 
     def __init__(self):
-        self.data_dir          = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../data')
+        self.base_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
+        self.default_tagger_path = os.path.join(self.base_dir, 'obt')
+
+        self.data_dir          = os.path.join(self.base_dir, 'data')
         self.promise_file      = os.path.join(self.data_dir, 'promises.csv')
         self.lemma_file        = os.path.join(self.data_dir, 'lemmas.json')
         self.similarities_file = os.path.join(self.data_dir, 'similarities.json')
@@ -23,11 +26,11 @@ class Executor():
         self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.json')
         self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.json')
 
+
     def parse_args(self):
         parser = argparse.ArgumentParser(
             description='Calculate promise similarity.')
-
-        parser.add_argument("-o", "--obt-path", type=str,
+        parser.add_argument("-o", "--obt-path", type=str, default=self.default_tagger_path,
                             help="Path to Oslo-Bergen-Tagger.")
 
         parser.add_argument('-n', '--no-cache',
@@ -64,7 +67,7 @@ class Executor():
     def download(self, url, path):
         r = requests.get(url, stream=True)
 
-        with open(path, 'w') as f:
+        with open(path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:
                     f.write(chunk)
@@ -74,8 +77,7 @@ class Executor():
             print('Tagging')
             self.lemmas = Tagger(self.args.obt_path, self.promises).tag()
 
-            with open(self.lemma_file, 'w') as out:
-                out.write(json.dumps(self.lemmas))
+            self.save_json(self.lemma_file, self.lemmas)
         else:
             print('Reading lemmas')
             with open(self.lemma_file, 'r') as file:
@@ -87,8 +89,7 @@ class Executor():
             docs = [' '.join(sentence) for sentence in self.lemmas]
             self.similarities = SimilarityCalculator(docs, threshold=0.7).get()
 
-            with open(self.similarities_file, 'w') as out:
-                out.write(json.dumps(self.similarities))
+            self.save_json(self.similarities_file, self.similarities)
         else:
             print('Reading similarities')
             with open(self.similarities_file, 'r') as file:
@@ -115,8 +116,7 @@ class Executor():
                     "related": related_promises
                 })
 
-        with open(self.result_file, 'w') as out:
-            out.write(json.dumps(result))
+        self.save_json(self.result_file, result)
 
     def calculate_program_similarities(self):
         print('Calculating program similarities')
@@ -131,7 +131,7 @@ class Executor():
 
             programs[slug].append(promise)
 
-        slugs = programs.keys()
+        slugs = list(programs.keys())
         texts = []
 
         for promises in programs.values():
@@ -160,8 +160,7 @@ class Executor():
                 } for related in sim['related']]
             })
 
-        with open(self.program_similarities_file, 'w') as out:
-            out.write(json.dumps(result))
+        self.save_json(self.program_similarities_file, result)
 
     """
     1. Hvor mange løfter i partiets program har over >90% likehet med løfter i foregående periodes program?
@@ -187,11 +186,7 @@ class Executor():
 
             by_promisor[promisor][period].append(promise)
 
-
-
-
-        with open(self.program_reuse_file, 'w') as out:
-            out.write(json.dumps(reuse))
+        self.save_json(self.program_reuse_file, reuse)
 
     def read_promises(self):
         print('Reading promises')
@@ -204,3 +199,7 @@ class Executor():
                 row['id'] = int(row['id'])
 
                 self.promises.append(row)
+
+    def save_json(self, file_name, data):
+        with open(file_name, 'w') as out:
+            json.dump(data, out, ensure_ascii=False)

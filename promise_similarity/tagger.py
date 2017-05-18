@@ -26,7 +26,7 @@ class Tagger():
         current_sentence = None
 
         while True:
-            line = proc.stdout.readline()
+            line = proc.stdout.readline().decode('utf-8')
 
             if line != '':
                 # print line.rstrip()

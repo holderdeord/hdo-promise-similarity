@@ -1,3 +1,5 @@
-from executor import Executor
-Executor().execute()
+import sys
+sys.path.append('.')
 
+from promise_similarity.executor import Executor
+Executor().execute()
