@@ -3,8 +3,7 @@ import re
 from subprocess import Popen, PIPE
 
 
-class Tagger():
-
+class Tagger:
     def __init__(self, obt_path, promises):
         self.obt_path = obt_path
         self.promises = promises
@@ -18,8 +17,7 @@ class Tagger():
                 out.write(separator + ' ' + row['body'] + '\n')
 
         tagbm = os.path.join(self.obt_path, 'tag-bm.sh')
-        proc = Popen([tagbm, tmpfile], stdout=PIPE,
-                     stderr=open(os.devnull, 'w'))
+        proc = Popen([tagbm, tmpfile], stdout=PIPE, stderr=open(os.devnull, 'w'))
 
         result = []
         current_word = None
