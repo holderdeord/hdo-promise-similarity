@@ -105,6 +105,7 @@ class Executor:
         pairs = []
         columns = ['original', 'promisor', 'period', 'score', 'id', 'body', 'url']
         url_template = 'https://lofter.holderdeord.no/?q={}&ids=true'
+        count = 0
 
         for sim in self.similarities:
             org_inserted = False
@@ -141,10 +142,11 @@ class Executor:
                         'url': url_template.format(rel['id'])
                     }
                     result.append(hit)
+                    count += 1
 
         self.save_csv(self.duplicates_result_file, columns, result)
 
-        print('Wrote {} possible dupliates to {}'.format(int(len(result) / 2), self.duplicates_result_file))
+        print('Wrote {} possible dupliates to {}'.format(count, self.duplicates_result_file))
 
     def consolidate(self):
         print('Writing result')
