@@ -3,3 +3,4 @@
 venv/
 .idea/
 obt/
+.DS_Store

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+
 import requests
 import os
 import csv
@@ -10,8 +11,8 @@ from slugify import slugify
 from .tagger import Tagger
 from .similarity_calculator import SimilarityCalculator
 
-class Executor():
 
+class Executor:
     def __init__(self):
         self.base_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
         self.default_tagger_path = os.path.join(self.base_dir, 'obt')
@@ -23,9 +24,10 @@ class Executor():
         self.result_file       = os.path.join(self.data_dir, 'result.json')
         self.stop_words_file   = os.path.join(self.data_dir, 'ton_idf.txt')
 
+        self.duplicates_result_file = os.path.join(self.data_dir, 'duplicates.csv')
+
         self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.json')
         self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.json')
-
 
     def parse_args(self):
         parser = argparse.ArgumentParser(
@@ -41,12 +43,12 @@ class Executor():
 
         self.args = parser.parse_args()
 
-
     def execute(self):
         self.parse_args()
         self.download_deps()
         self.tag()
         self.calculate_promise_similarities()
+        self.write_duplicate_spreadsheet()
         self.consolidate()
         self.calculate_program_similarities()
         self.calculate_program_reuse()
@@ -55,7 +57,7 @@ class Executor():
         if (not os.path.exists(self.promise_file)) or 'download' in self.args.no_cache:
             print('Downloading promises')
             self.download(
-                'https://files.holderdeord.no/data/2017/internal/promises.csv', self.promise_file)
+                'https://files.holderdeord.no/data/csv/promises.csv', self.promise_file)
 
         if (not os.path.exists(self.stop_words_file)) or 'stop_words' in self.args.no_cache:
             print('Downloading stop words')
@@ -95,6 +97,57 @@ class Executor():
             with open(self.similarities_file, 'r') as file:
                 self.similarities = json.load(file)
 
+    def write_duplicate_spreadsheet(self):
+        """ Find possible duplicate promises which are not self, have same promisor in same period """
+        print('Writing spreadsheet')
+
+        result = []
+        pairs = []
+        columns = ['original', 'promisor', 'period', 'score', 'id', 'body', 'url']
+        url_template = 'https://lofter.holderdeord.no/?q={}&ids=true'
+        count = 0
+
+        for sim in self.similarities:
+            org_inserted = False
+            for related in sim['related']:
+                org = self.promises[sim['index']]
+                rel = self.promises[related['index']]
+                pair = {org['id'], rel['id']}
+                same_promise = related['index'] == sim['index']
+                same_promisor = org['promisor'] == rel['promisor']
+                same_period = org['period'] == rel['period']
+                if not same_promise and same_promisor and same_period and related['score'] >= 0.8 and pair not in pairs:
+                    pairs.append(pair)  # only add a pair once
+
+                    if not org_inserted:
+                        org_data = {
+                            "original": 'Y',
+                            "promisor": org['promisor'],
+                            "period": org['period'],
+                            "id": org['id'],
+                            "body": org['body'],
+                            'score': '',
+                            'url': url_template.format(org['id'])
+                        }
+                        result.append(org_data)
+                        org_inserted = True
+
+                    hit = {
+                        "original": '',
+                        "promisor": org['promisor'],
+                        "period": org['period'],
+                        "id": rel['id'],
+                        "body": rel['body'],
+                        "score": related['score'],
+                        'url': url_template.format(rel['id'])
+                    }
+                    result.append(hit)
+                    count += 1
+
+        self.save_csv(self.duplicates_result_file, columns, result)
+
+        print('Wrote {} possible dupliates to {}'.format(count, self.duplicates_result_file))
+
     def consolidate(self):
         print('Writing result')
 
@@ -123,8 +176,7 @@ class Executor():
         programs = {}
 
         for promise in self.promises:
-            slug = slugify(promise['promisor'] + '-' +
-                           promise['period'])
+            slug = slugify(promise['promisor'] + '-' + promise['period'])
 
             if slug not in programs:
                 programs[slug] = []
@@ -147,8 +199,7 @@ class Executor():
             for line in f:
                 stop_words.append(line.split(' ')[0])
 
-        similarities = SimilarityCalculator(
-            texts, top=20, stop_words=stop_words).get()
+        similarities = SimilarityCalculator(texts, top=20, stop_words=stop_words).get()
         result = []
 
         for sim in similarities:
@@ -178,10 +229,10 @@ class Executor():
             promisor = promise['promisor']
             period = promise['period']
 
-            if not promisor in by_promisor:
+            if promisor not in by_promisor:
                 by_promisor[promisor] = {}
 
-            if not period in by_promisor[promisor]:
+            if period not in by_promisor[promisor]:
                 by_promisor[promisor][period] = []
 
             by_promisor[promisor][period].append(promise)
@@ -203,3 +254,9 @@ class Executor():
     def save_json(self, file_name, data):
         with open(file_name, 'w') as out:
             json.dump(data, out, ensure_ascii=False)
+
+    def save_csv(self, file_name, columns, data):
+        with open(file_name, 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, columns)
+            writer.writeheader()
+            writer.writerows(data)

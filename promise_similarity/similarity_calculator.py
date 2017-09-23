@@ -3,8 +3,7 @@ from sklearn.metrics.pairwise import linear_kernel
 import numpy as np
 
 
-class SimilarityCalculator():
-
+class SimilarityCalculator:
     def __init__(self, docs, top=None, threshold=None, stop_words=None):
         self.docs = docs
         self.top = top
