@@ -27,7 +27,6 @@ class Tagger:
             line = proc.stdout.readline().decode('utf-8')
 
             if line != '':
-                # print line.rstrip()
 
                 word = re.match(r'<word>(.+)</word>$', line)
 

@@ -218,12 +218,19 @@ class Executor:
     2. Hvor mange løfter i regjeringsplattformen har over >90% likhet løfter i med respektive partienes program?
     """
     def calculate_program_reuse(self):
-        raise NotImplementedError('calculate_program_reuse')
-
         print('Calculating program reuse')
 
+        threshold = 0.9
         by_promisor = {}
         reuse = {}
+        sim_by_index = {}
+
+        for sim in self.similarities:
+            sim_by_index[sim['index']] = {}
+
+            for r in sim['related']:
+                if r['score'] >= threshold:
+                    sim_by_index[sim['index']][r['index']] = 1
 
         for promise in self.promises:
             promisor = promise['promisor']
@@ -236,6 +243,38 @@ class Executor:
                 by_promisor[promisor][period] = []
 
             by_promisor[promisor][period].append(promise)
+
+        for promisor, periods in by_promisor.items():
+            for period, promises in periods.items():
+                if promisor not in reuse:
+                    reuse[promisor] = {}
+
+                if period not in reuse[promisor]:
+                    reuse[promisor][period] = {}
+
+                for compared_promisor, compared_periods in by_promisor.items():
+                    for compared_period, compared_promises in compared_periods.items():
+                        if promisor != compared_promisor or period != compared_period:
+                            if compared_promisor not in reuse[promisor][period]:
+                                reuse[promisor][period][compared_promisor] = {}
+
+                            if compared_period not in reuse[promisor][period][compared_promisor]:
+                                reuse[promisor][period][compared_promisor][compared_period] = { 'count': 0 }
+
+                            print('Comparing {} ({}) with {} ({})'.format(promisor, period, compared_promisor, compared_period))
+
+                            for promise in promises:
+                                for compared_promise in compared_promises:
+                                    if promise['index'] in sim_by_index:
+                                        related = sim_by_index[promise['index']]
+
+                                        if compared_promise['index'] in related:
+                                            reuse[promisor][period][compared_promisor][compared_period]['count'] += 1
+
+                            for stat in reuse[promisor][period][compared_promisor].values():
+                                stat['percentage'] = stat['count'] * 100 / len(promises)
+
+
 
         self.save_json(self.program_reuse_file, reuse)
 
