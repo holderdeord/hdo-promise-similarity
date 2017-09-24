@@ -38,7 +38,7 @@ class SimilarityCalculator:
                     "index": int(idx),
                     "score": score,
                     "text": self.docs[int(idx)]
-                } for (idx, score) in zip(related_docs_indices, scores) if idx != index
+                } for (idx, score) in zip(related_docs_indices, scores)
             ]
 
             if len(related) > 0:

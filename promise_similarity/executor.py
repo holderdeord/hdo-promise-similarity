@@ -24,7 +24,7 @@ class Executor:
         self.result_file       = os.path.join(self.data_dir, 'result.json')
         self.stop_words_file   = os.path.join(self.data_dir, 'ton_idf.txt')
 
-        self.duplicates_result_file = os.path.join(self.data_dir, 'duplicates.csv')
+        self.duplicates_result_file = os.path.join(self.data_dir, 'duplicates.tsv')
 
         self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.json')
         self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.json')
@@ -144,7 +144,7 @@ class Executor:
                     result.append(hit)
                     count += 1
 
-        self.save_csv(self.duplicates_result_file, columns, result)
+        self.save_tsv(self.duplicates_result_file, columns, result)
 
         print('Wrote {} possible dupliates to {}'.format(count, self.duplicates_result_file))
 
@@ -157,11 +157,10 @@ class Executor:
             related_promises = []
 
             for related in sim['related']:
-                if related['index'] != sim['index']:
-                    related_promises.append({
-                        "id": self.promises[related['index']]['id'],
-                        "score": related['score']
-                    })
+                related_promises.append({
+                    "id": self.promises[related['index']]['id'],
+                    "score": related['score']
+                })
 
             if len(sim['related']):
                 result.append({
@@ -218,50 +217,48 @@ class Executor:
     2. Hvor mange løfter i regjeringsplattformen har over >90% likhet løfter i med respektive partienes program?
     """
     def calculate_program_reuse(self):
-        print('Calculating program reuse')
+        if (not os.path.exists(self.program_reuse_file)) or 'program_reuse' in self.args.no_cache:
+            print('Calculating program reuse')
 
-        threshold = 0.9
-        by_promisor = {}
-        reuse = {}
-        sim_by_index = {}
+            threshold = 0.7
+            by_promisor = {}
+            reuse = {}
+            sim_by_index = {}
 
-        for sim in self.similarities:
-            sim_by_index[sim['index']] = {}
+            for sim in self.similarities:
+                sim_by_index[sim['index']] = {}
 
-            for r in sim['related']:
-                if r['score'] >= threshold:
-                    sim_by_index[sim['index']][r['index']] = 1
+                for r in sim['related']:
+                    if r['score'] >= threshold:
+                        sim_by_index[sim['index']][r['index']] = 1
 
-        for promise in self.promises:
-            promisor = promise['promisor']
-            period = promise['period']
+            for promise in self.promises:
+                promisor = promise['promisor']
+                period = promise['period']
 
-            if promisor not in by_promisor:
-                by_promisor[promisor] = {}
+                if promisor not in by_promisor:
+                    by_promisor[promisor] = {}
 
-            if period not in by_promisor[promisor]:
-                by_promisor[promisor][period] = []
+                if period not in by_promisor[promisor]:
+                    by_promisor[promisor][period] = []
 
-            by_promisor[promisor][period].append(promise)
+                by_promisor[promisor][period].append(promise)
 
-        for promisor, periods in by_promisor.items():
-            for period, promises in periods.items():
-                if promisor not in reuse:
-                    reuse[promisor] = {}
+            for promisor, periods in by_promisor.items():
+                for period, promises in periods.items():
+                    slug = ':'.join([promisor, period])
 
-                if period not in reuse[promisor]:
-                    reuse[promisor][period] = {}
+                    if slug not in reuse:
+                        reuse[slug] = {}
 
-                for compared_promisor, compared_periods in by_promisor.items():
-                    for compared_period, compared_promises in compared_periods.items():
-                        if promisor != compared_promisor or period != compared_period:
-                            if compared_promisor not in reuse[promisor][period]:
-                                reuse[promisor][period][compared_promisor] = {}
+                    for compared_promisor, compared_periods in by_promisor.items():
+                        for compared_period, compared_promises in compared_periods.items():
+                            compared_slug = ':'.join([compared_promisor, compared_period])
 
-                            if compared_period not in reuse[promisor][period][compared_promisor]:
-                                reuse[promisor][period][compared_promisor][compared_period] = { 'count': 0 }
+                            if compared_slug not in reuse[slug]:
+                                reuse[slug][compared_slug] = { 'count': 0 }
 
-                            print('Comparing {} ({}) with {} ({})'.format(promisor, period, compared_promisor, compared_period))
+                            print('Comparing {} with {}'.format(slug, compared_slug))
 
                             for promise in promises:
                                 for compared_promise in compared_promises:
@@ -269,14 +266,34 @@ class Executor:
                                         related = sim_by_index[promise['index']]
 
                                         if compared_promise['index'] in related:
-                                            reuse[promisor][period][compared_promisor][compared_period]['count'] += 1
+                                            reuse[slug][compared_slug]['count'] += 1
 
-                            for stat in reuse[promisor][period][compared_promisor].values():
+                            for stat in reuse[slug].values():
                                 stat['percentage'] = stat['count'] * 100 / len(promises)
 
+            self.program_reuse = reuse
+            self.save_json(self.program_reuse_file, reuse)
+        else:
+            print('Reading program reuse')
+            with open(self.program_reuse_file, 'r') as file:
+                self.program_reuse = json.load(file)
 
+        keys = list(self.program_reuse.keys())
+        columns = [''] + keys;
+        rows = []
 
-        self.save_json(self.program_reuse_file, reuse)
+        for slug, comparisons in self.program_reuse.items():
+            row = {'': slug}
+
+            for key in keys:
+                if key in comparisons:
+                    row[key] = comparisons[key]['percentage']
+                else:
+                    row[key] = '-'
+
+            rows.append(row)
+
+        self.save_tsv(self.program_reuse_file.replace('.json', '.tsv'), columns, rows)
 
     def read_promises(self):
         print('Reading promises')
@@ -294,8 +311,8 @@ class Executor:
         with open(file_name, 'w') as out:
             json.dump(data, out, ensure_ascii=False)
 
-    def save_csv(self, file_name, columns, data):
+    def save_tsv(self, file_name, columns, data):
         with open(file_name, 'w') as csvfile:
-            writer = csv.DictWriter(csvfile, columns)
+            writer = csv.DictWriter(csvfile, columns, delimiter="\t")
             writer.writeheader()
             writer.writerows(data)
