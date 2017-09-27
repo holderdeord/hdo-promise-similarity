@@ -7,6 +7,7 @@ import requests
 import os
 import csv
 
+from operator import itemgetter
 from slugify import slugify
 from .tagger import Tagger
 from .similarity_calculator import SimilarityCalculator
@@ -50,8 +51,8 @@ class Executor:
         self.calculate_promise_similarities()
         self.write_duplicate_spreadsheet()
         self.consolidate()
-        self.calculate_program_similarities()
         self.calculate_program_reuse()
+        self.write_solberg_reuse()
 
     def download_deps(self):
         if (not os.path.exists(self.promise_file)) or 'download' in self.args.no_cache:
@@ -170,48 +171,6 @@ class Executor:
 
         self.save_json(self.result_file, result)
 
-    def calculate_program_similarities(self):
-        print('Calculating program similarities')
-        programs = {}
-
-        for promise in self.promises:
-            slug = slugify(promise['promisor'] + '-' + promise['period'])
-
-            if slug not in programs:
-                programs[slug] = []
-
-            programs[slug].append(promise)
-
-        slugs = list(programs.keys())
-        texts = []
-
-        for promises in programs.values():
-            full_text = []
-
-            for promise in promises:
-                full_text.append(promise['body'])
-
-            texts.append(' '.join(full_text))
-
-        stop_words = []
-        with open(os.path.join(self.data_dir, 'ton_idf.txt'), 'r') as f:
-            for line in f:
-                stop_words.append(line.split(' ')[0])
-
-        similarities = SimilarityCalculator(texts, top=20, stop_words=stop_words).get()
-        result = []
-
-        for sim in similarities:
-            result.append({
-                'slug': slugs[sim['index']],
-                'related': [{
-                    'score': related['score'],
-                    'slug': slugs[related['index']]
-                } for related in sim['related']]
-            })
-
-        self.save_json(self.program_similarities_file, result)
-
     """
     1. Hvor mange løfter i partiets program har over >90% likehet med løfter i foregående periodes program?
     2. Hvor mange løfter i regjeringsplattformen har over >90% likhet løfter i med respektive partienes program?
@@ -294,6 +253,37 @@ class Executor:
             rows.append(row)
 
         self.save_tsv(self.program_reuse_file.replace('.json', '.tsv'), columns, rows)
+
+    def write_solberg_reuse(self):
+        promises = [promise for promise in self.promises if promise['promisor'] == 'Solberg']
+        sim_by_index = {}
+
+        for sim in self.similarities:
+            sim_by_index[sim['index']] = sim['related'];
+
+        columns = ['ID A', 'Program A', 'Tekst A', 'Score', 'ID B', 'Program B', 'Tekst B']
+        rows = []
+
+        for promise in promises:
+            related = [rel for rel in sim_by_index[promise['index']] if rel['index'] != promise['index']]
+
+            if related:
+                rows.append({
+                    'Program A': promise['promisor'] + ':' + promise['period'],
+                    'Tekst A': promise['body'],
+                    'ID A': promise['id']
+                })
+
+                for rel in sorted(related, key=itemgetter('score'), reverse=True):
+                    related_promise = self.promises[rel['index']]
+                    rows.append({
+                        'Program B': related_promise['promisor'] + ':' + related_promise['period'],
+                        'Score': rel['score'],
+                        'Tekst B': related_promise['body'],
+                        'ID B': related_promise['id']
+                    })
+
+        self.save_tsv(os.path.join(self.data_dir, 'solberg-reuse-details.tsv'), columns, rows)
 
     def read_promises(self):
         print('Reading promises')
