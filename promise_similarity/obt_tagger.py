@@ -3,7 +3,7 @@ import re
 from subprocess import Popen, PIPE
 
 
-class Tagger:
+class ObtTagger:
     def __init__(self, obt_path, promises):
         self.obt_path = obt_path
         self.promises = promises
@@ -51,6 +51,9 @@ class Tagger:
                         current_word['tags'] = tag.group(2).split(' ')
             else:
                 break
+
+        if current_sentence:
+            result.append(current_sentence)
 
         return [
             [word['lemma'] for word in sentence] for sentence in result

@@ -6,10 +6,11 @@ import json
 import requests
 import os
 import csv
+import sys
 
 from operator import itemgetter
 from slugify import slugify
-from .tagger import Tagger
+from .obt_tagger import ObtTagger
 from .similarity_calculator import SimilarityCalculator
 
 
@@ -52,7 +53,7 @@ class Executor:
         self.write_duplicate_spreadsheet()
         self.consolidate()
         self.calculate_program_reuse()
-        self.write_solberg_reuse()
+        self.write_all_details()
 
     def download_deps(self):
         if (not os.path.exists(self.promise_file)) or 'download' in self.args.no_cache:
@@ -78,7 +79,7 @@ class Executor:
     def tag(self):
         if (not os.path.exists(self.lemma_file)) or 'tag' in self.args.no_cache:
             print('Tagging')
-            self.lemmas = Tagger(self.args.obt_path, self.promises).tag()
+            self.lemmas = ObtTagger(self.args.obt_path, self.promises).tag()
 
             self.save_json(self.lemma_file, self.lemmas)
         else:
@@ -86,11 +87,18 @@ class Executor:
             with open(self.lemma_file, 'r') as file:
                 self.lemmas = json.load(file)
 
+        if (len(self.lemmas) != len(self.promises)):
+            print('ERROR: Found {} lemmas for {} promises!'.format(len(self.lemmas), len(self.promises)))
+            sys.exit(1)
+
+
     def calculate_promise_similarities(self):
         if (not os.path.exists(self.similarities_file)) or 'similarities' in self.args.no_cache:
             print('Calculating similarity')
             docs = [' '.join(sentence) for sentence in self.lemmas]
             self.similarities = SimilarityCalculator(docs, threshold=0.7).get()
+
+            print('...writing {} similarities for {} promises and {} lemmas'.format(len(self.similarities), len(self.promises), len(self.lemmas)));
 
             self.save_json(self.similarities_file, self.similarities)
         else:
@@ -254,8 +262,17 @@ class Executor:
 
         self.save_tsv(self.program_reuse_file.replace('.json', '.tsv'), columns, rows)
 
-    def write_solberg_reuse(self):
-        promises = [promise for promise in self.promises if promise['promisor'] == 'Solberg']
+    def write_all_details(self):
+        self.write_details('Høyre', ['Venstre'])
+        self.write_details('Høyre', ['Venstre', 'Fremskrittspartiet'])
+
+        for promisor in self.promisors:
+            self.write_details(promisor)
+
+    def write_details(self, base_promisor, promisor_filter = []):
+        print('Writing details', base_promisor, promisor_filter)
+
+        promises = [promise for promise in self.promises if promise['promisor'] == base_promisor]
         sim_by_index = {}
 
         for sim in self.similarities:
@@ -266,6 +283,9 @@ class Executor:
 
         for promise in promises:
             related = [rel for rel in sim_by_index[promise['index']] if rel['index'] != promise['index']]
+
+            if promisor_filter:
+                related = [rel for rel in related if self.promises[rel['index']]['promisor'] in promisor_filter]
 
             if related:
                 rows.append({
@@ -283,11 +303,13 @@ class Executor:
                         'ID B': related_promise['id']
                     })
 
-        self.save_tsv(os.path.join(self.data_dir, 'solberg-reuse-details.tsv'), columns, rows)
+        slug = slugify('-'.join([base_promisor] + promisor_filter))
+        self.save_tsv(os.path.join(self.data_dir, slug + '-reuse-details.tsv'), columns, rows)
 
     def read_promises(self):
         print('Reading promises')
         self.promises = []
+        self.promisors = set()
 
         with open(self.promise_file, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
@@ -295,6 +317,7 @@ class Executor:
                 row['index'] = index
                 row['id'] = int(row['id'])
 
+                self.promisors.add(row['promisor'])
                 self.promises.append(row)
 
     def save_json(self, file_name, data):
