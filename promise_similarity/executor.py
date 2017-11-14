@@ -18,22 +18,12 @@ class Executor:
     def __init__(self):
         self.base_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
         self.default_tagger_path = os.path.join(self.base_dir, 'obt')
-
-        self.data_dir          = os.path.join(self.base_dir, 'data')
-        self.promise_file      = os.path.join(self.data_dir, 'promises.csv')
-        self.lemma_file        = os.path.join(self.data_dir, 'lemmas.json')
-        self.similarities_file = os.path.join(self.data_dir, 'similarities.json')
-        self.result_file       = os.path.join(self.data_dir, 'result.json')
-        self.stop_words_file   = os.path.join(self.data_dir, 'ton_idf.txt')
-
-        self.duplicates_result_file = os.path.join(self.data_dir, 'duplicates.tsv')
-
-        self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.json')
-        self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.json')
+        self.data_dir = os.path.join(self.base_dir, 'data')
 
     def parse_args(self):
         parser = argparse.ArgumentParser(
             description='Calculate promise similarity.')
+
         parser.add_argument("-o", "--obt-path", type=str, default=self.default_tagger_path,
                             help="Path to Oslo-Bergen-Tagger.")
 
@@ -43,10 +33,27 @@ class Executor:
                             nargs='*',
                             help="Things that shouldn't be cached.")
 
+        parser.add_argument('-t', '--threshold', default=0.7, type=float, help="Similarity threshold");
+
         self.args = parser.parse_args()
+
+    def setup_paths(self):
+        self.promise_file      = os.path.join(self.data_dir, 'promises.csv')
+        self.lemma_file        = os.path.join(self.data_dir, 'lemmas.json')
+        self.stop_words_file   = os.path.join(self.data_dir, 'ton_idf.txt')
+
+        self.similarities_file = os.path.join(self.data_dir, 'similarities.t{}.json'.format(self.args.threshold))
+        self.result_file       = os.path.join(self.data_dir, 'result.t{}.json'.format(self.args.threshold))
+
+        self.duplicates_result_file = os.path.join(self.data_dir, 'duplicates.t{}.tsv'.format(self.args.threshold))
+
+        self.program_similarities_file = os.path.join(self.data_dir, 'program-similarities.t{}.json'.format(self.args.threshold))
+        self.program_reuse_file        = os.path.join(self.data_dir, 'program-reuse.t{}.json'.format(self.args.threshold))
+
 
     def execute(self):
         self.parse_args()
+        self.setup_paths();
         self.download_deps()
         self.tag()
         self.calculate_promise_similarities()
@@ -94,9 +101,9 @@ class Executor:
 
     def calculate_promise_similarities(self):
         if (not os.path.exists(self.similarities_file)) or 'similarities' in self.args.no_cache:
-            print('Calculating similarity')
+            print('Calculating similarity with threshold {}'.format(self.args.threshold))
             docs = [' '.join(sentence) for sentence in self.lemmas]
-            self.similarities = SimilarityCalculator(docs, threshold=0.7).get()
+            self.similarities = SimilarityCalculator(docs, threshold=self.args.threshold).get()
 
             print('...writing {} similarities for {} promises and {} lemmas'.format(len(self.similarities), len(self.promises), len(self.lemmas)));
 
@@ -187,7 +194,7 @@ class Executor:
         if (not os.path.exists(self.program_reuse_file)) or 'program_reuse' in self.args.no_cache:
             print('Calculating program reuse')
 
-            threshold = 0.7
+            threshold = self.args.threshold
             by_promisor = {}
             reuse = {}
             sim_by_index = {}
@@ -263,17 +270,23 @@ class Executor:
         self.save_tsv(self.program_reuse_file.replace('.json', '.tsv'), columns, rows)
 
     def write_all_details(self):
-        self.write_details('Høyre', ['Venstre'])
-        self.write_details('Høyre', ['Venstre', 'Fremskrittspartiet'])
+        period_filter = ['2017-2021']
+
+        self.write_details('Høyre', promisor_filter=['Venstre'], period_filter=period_filter)
+        self.write_details('Høyre', promisor_filter=['Venstre', 'Fremskrittspartiet'], period_filter=period_filter)
+        self.write_details('Fremskrittspartiet', promisor_filter=['Venstre'], period_filter=period_filter)
 
         for promisor in self.promisors:
-            self.write_details(promisor)
+            self.write_details(promisor, period_filter=period_filter)
 
-    def write_details(self, base_promisor, promisor_filter = []):
+    def write_details(self, base_promisor, promisor_filter = [], period_filter=[]):
         print('Writing details', base_promisor, promisor_filter)
 
         promises = [promise for promise in self.promises if promise['promisor'] == base_promisor]
         sim_by_index = {}
+
+        if period_filter:
+            promises = [promise for promise in promises if promise['period'] in period_filter]
 
         for sim in self.similarities:
             sim_by_index[sim['index']] = sim['related'];
@@ -286,6 +299,9 @@ class Executor:
 
             if promisor_filter:
                 related = [rel for rel in related if self.promises[rel['index']]['promisor'] in promisor_filter]
+
+            if period_filter:
+                related = [rel for rel in related if self.promises[rel['index']]['period'] in period_filter]
 
             if related:
                 rows.append({
