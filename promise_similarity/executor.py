@@ -275,6 +275,7 @@ class Executor:
         self.write_details('Høyre', promisor_filter=['Venstre'], period_filter=period_filter)
         self.write_details('Høyre', promisor_filter=['Venstre', 'Fremskrittspartiet'], period_filter=period_filter)
         self.write_details('Fremskrittspartiet', promisor_filter=['Venstre'], period_filter=period_filter)
+        self.write_details('Solberg', promisor_filter=['Venstre', 'Høyre', 'Fremskrittspartiet'], period_filter=period_filter)
 
         for promisor in self.promisors:
             self.write_details(promisor, period_filter=period_filter)
