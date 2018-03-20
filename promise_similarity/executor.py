@@ -57,8 +57,10 @@ class Executor:
         self.download_deps()
         self.tag()
         self.calculate_promise_similarities()
+        self.write_threshold_stats()
+        self.write_threshold_stats(high=0.5)
         self.write_duplicate_spreadsheet()
-        self.consolidate()
+        self.write_result()
         self.calculate_program_reuse()
         self.write_all_details()
 
@@ -164,7 +166,7 @@ class Executor:
 
         print('Wrote {} possible dupliates to {}'.format(count, self.duplicates_result_file))
 
-    def consolidate(self):
+    def write_result(self):
         print('Writing result')
 
         result = []
@@ -280,6 +282,23 @@ class Executor:
         for promisor in self.promisors:
             self.write_details(promisor, period_filter=period_filter)
 
+    def write_threshold_stats(self, low=0.1, high=1.0):
+        print('Writing threshold stats', low, high);
+
+        counts = []
+
+        for sim in self.similarities:
+            counts.append(len([p for p in sim['related'] if p['score'] >= low and p['score'] <= high]))
+
+        stats = {
+            'avg': sum(counts) / len(self.similarities),
+            'min': min(counts),
+            'max': max(counts)
+        }
+
+        file = os.path.join(self.data_dir, 'threshold-stats-{}-to-{}.json'.format(low, high))
+        self.save_json(file, stats);
+
     def write_details(self, base_promisor, promisor_filter = [], period_filter=[]):
         print('Writing details', base_promisor, promisor_filter)
 
@@ -296,7 +315,7 @@ class Executor:
         rows = []
 
         for promise in promises:
-            related = [rel for rel in sim_by_index[promise['index']] if rel['index'] != promise['index']]
+            related = [rel for rel in sim_by_index[promise['index']] if rel['index'] != promise['index'] and rel['score'] <= 0.51]
 
             if promisor_filter:
                 related = [rel for rel in related if self.promises[rel['index']]['promisor'] in promisor_filter]
